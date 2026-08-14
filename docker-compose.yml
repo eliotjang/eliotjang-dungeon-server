@@ -1,0 +1,24 @@
+#로컬 개발 전용
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: ejd-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: 13504
+      MYSQL_DATABASE: ejd_game
+      MYSQL_USER: eliotjang
+      MYSQL_PASSWORD: 13504
+    ports:
+      - "3306:3306"                             # WSL 3306 --> 컨테이너 3306
+    volumes:
+      - mysql_data:/var/lib/mysql               # 데이터 영속화
+      - ./sql:/docker-entrypoint-initdb.d:ro    # 초기화 SQL 자동 실행
+    command: --character-set-server=utf8mb4     # utf8mb4로 설정
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p13504"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  mysql_data:
