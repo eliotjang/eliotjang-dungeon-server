@@ -3,11 +3,12 @@ cmake_minimum_required(VERSION 3.21)
 project(ejd_server VERSION 0.1.0 LANGUAGES CXX)
 
 #---- 전역 : 언어 표준 ----
-set(CMAKE_CXX_STANDARD 20) set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF) # -std=c++20
 
 #---- 컨벤션 ----
-set(EJD_STRICT_OPTIONS -Wall -Wextra -Werror -fno -exceptions -fno -rtti)
+set(EJD_STRICT_OPTIONS -Wall -Wextra -Werror -fno-exceptions -fno-rtti)
 
 #---- ejd_lib : 서버 코드 전체 ----
 add_library(ejd_lib STATIC src/common/version.cc)
@@ -26,7 +27,7 @@ enable_testing() # CTest 사용
 include(FetchContent)
 FetchContent_Declare(googletest
     GIT_REPOSITORY https://github.com/google/googletest.git
-    GIT_TAG v1 .18.0
+    GIT_TAG v1.18.0
     GIT_SHALLOW TRUE
 )
 FetchContent_MakeAvailable(googletest)
@@ -35,4 +36,5 @@ add_executable(ejd_tests tests/smoke_test.cc)
 target_compile_options(ejd_tests PRIVATE -Wall -Wextra -Werror) # 예외 및 런타임 타입 정보 사용 가능
 target_link_libraries(ejd_tests PRIVATE ejd_lib GTest::gtest_main)
 
-include(GoogleTest) gtest_discover_tests(ejd_tests)
+include(GoogleTest)
+gtest_discover_tests(ejd_tests)
