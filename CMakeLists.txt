@@ -11,10 +11,15 @@ set(CMAKE_CXX_EXTENSIONS OFF) # -std=c++20
 set(EJD_STRICT_OPTIONS -Wall -Wextra -Werror -fno-exceptions -fno-rtti)
 
 #---- ejd_lib : 서버 코드 전체 ----
-add_library(ejd_lib STATIC src/common/version.cc)
-target_include_directories(ejd_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src) # ejd_server, ejd_tests도 src include 경로 사용
+add_library(ejd_lib STATIC
+    src/common/version.cc
+    src/net/socket_util.cc
+)
+# ejd_server, ejd_tests도 src include 경로 사용
+target_include_directories(ejd_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_compile_options(ejd_lib PRIVATE ${EJD_STRICT_OPTIONS})
-target_compile_definitions(ejd_lib PRIVATE EJD_VERSION="${PROJECT_VERSION}") # 프로젝트 버전 주입
+# 프로젝트 버전 주입
+target_compile_definitions(ejd_lib PRIVATE EJD_VERSION="${PROJECT_VERSION}")
 
 #---- ejd_server : 실행 파일 ----
 add_executable(ejd_server src/main.cc)
@@ -33,7 +38,8 @@ FetchContent_Declare(googletest
 FetchContent_MakeAvailable(googletest)
 
 add_executable(ejd_tests tests/smoke_test.cc)
-target_compile_options(ejd_tests PRIVATE -Wall -Wextra -Werror) # 예외 및 런타임 타입 정보 사용 가능
+# 예외 및 런타임 타입 정보 사용 가능
+target_compile_options(ejd_tests PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(ejd_tests PRIVATE ejd_lib GTest::gtest_main)
 
 include(GoogleTest)
