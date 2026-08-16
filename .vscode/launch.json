@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "preLaunchTask": "build-debug",
+      "name": "Launch",
+      "request": "launch",
+      "type": "cppdbg",
+      "program": "${workspaceFolder}/build/debug/ejd_server",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "console": "integratedTerminal",
+      "stopAtEntry": true,
+      "setupCommands": [
+        { "text": "-enable-pretty-printing", "ignoreFailures": true },
+        { "text": "set debuginfod enabled off" }
+      ]
+    }
+  ]
+}
