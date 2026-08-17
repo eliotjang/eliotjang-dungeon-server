@@ -21,8 +21,6 @@ UniqueFd CreateListenSocket(uint16_t port) {
   if (setsockopt(fd.get(), SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {
     perror("setsockopt");
     return UniqueFd();
-
-    
   }
 
   sockaddr_in addr{};
