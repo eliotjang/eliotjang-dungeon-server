@@ -9,7 +9,7 @@
 
 namespace ejd::net {
 UniqueFd CreateListenSocket(uint16_t port) {
-  int raw = socket(AF_INET, SOCK_STREAM, 0);
+  int raw = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
   if (raw == -1) {
     perror("socket");
     return UniqueFd();

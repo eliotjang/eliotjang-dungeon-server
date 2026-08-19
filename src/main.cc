@@ -3,12 +3,12 @@
 #include <cerrno>
 #include <csignal>
 #include <iostream>
+#include <utility>
 
 #include "common/version.h"
+#include "net/epoll_reactor.h"
 #include "net/socket_util.h"
 #include "net/unique_fd.h"
-
-void HandleClient(ejd::net::UniqueFd client);
 
 int main() {
   std::cout << ejd::common::Version() << "\n";
@@ -19,52 +19,17 @@ int main() {
     std::cerr << "failed to create listen socket" << "\n";
     return 1;
   }
+
+  auto reactor = ejd::net::EpollReactor(std::move(listen_fd));
+
+  if (!reactor.Init()) {
+    std::cerr << "failed to init epoll socket" << "\n";
+    return 1;
+  }
+
   std::cout << "listening on port 5555" << "\n";
 
-  while (true) {
-    int raw = accept(listen_fd.get(), nullptr, nullptr);
-    if (raw == -1) {
-      if (errno == EINTR) {
-        continue;
-      }
-      perror("accept");
-      continue;
-    }
-
-    HandleClient(ejd::net::UniqueFd(raw));
-  }
+  reactor.Run();
 
   return 0;
-}
-
-void HandleClient(ejd::net::UniqueFd client) {
-  while (true) {
-    char buf[4096];
-    ssize_t n = read(client.get(), buf, sizeof(buf));
-    if (n == 0) {
-      std::cout << "client closed connection" << "\n";
-      return;
-    }
-    if (n < 0) {
-      if (errno == EINTR) {
-        continue;
-      }
-      perror("read");
-      return;
-    }
-
-    ssize_t sent = 0;
-    while (sent < n) {
-      ssize_t w = write(client.get(), buf + sent, n - sent);
-      if (w < 0) {
-        if (errno == EINTR) {
-          continue;
-        }
-        perror("write");
-        return;
-      }
-
-      sent += w;
-    }
-  }
 }
