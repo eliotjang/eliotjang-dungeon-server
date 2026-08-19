@@ -46,3 +46,8 @@ target_link_libraries(ejd_tests PRIVATE ejd_lib GTest::gtest_main)
 
 include(GoogleTest)
 gtest_discover_tests(ejd_tests)
+
+#---- ejd_bot : 부하 검증 봇 클라이언트----
+add_executable(ejd_bot botclient/main.cc)
+target_link_libraries(ejd_bot PRIVATE ejd_lib)
+target_compile_options(ejd_bot PRIVATE ${EJD_STRICT_OPTIONS})
