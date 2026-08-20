@@ -10,12 +10,38 @@
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
       "miDebuggerPath": "/usr/bin/gdb",
-      "console": "integratedTerminal",
       "stopAtEntry": true,
       "setupCommands": [
         { "text": "-enable-pretty-printing", "ignoreFailures": true },
         { "text": "set debuginfod enabled off" }
       ]
+    },
+    {
+      "preLaunchTask": "build-debug",
+      "name": "Launch Tests",
+      "request": "launch",
+      "type": "cppdbg",
+      "program": "${workspaceRoot}/build/debug/ejd_tests",
+      "args": [
+        "--gtest_filter=${input:gtestFilter}",
+        "--gtest_break_on_failure"
+      ],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "setupCommands": [
+        { "text": "-enable-pretty-printing", "ignoreFailures": true},
+        { "text": "set debuginfo enabled off" }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "gtestFilter",
+      "type": "promptString",
+      "description": "gtest filter (ex: SmokeTest.* or * )",
+      "default": "*"
     }
   ]
 }
