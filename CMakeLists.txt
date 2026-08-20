@@ -16,6 +16,7 @@ add_library(ejd_lib STATIC
     src/net/socket_util.cc
     src/net/session.cc
     src/net/epoll_reactor.cc
+    src/net/ring_buffer.cc
 )
 # ejd_server, ejd_tests도 src include 경로 사용
 target_include_directories(ejd_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
