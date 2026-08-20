@@ -3,7 +3,6 @@
 #include <gtest/gtest.h>
 
 #include <cstring>
-#include "gtest/gtest.h"
 
 namespace ejd::net {
 
