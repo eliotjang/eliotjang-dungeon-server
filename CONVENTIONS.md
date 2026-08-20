@@ -17,6 +17,8 @@
 | 네임스페이스 | 소문자 snake_case | `ejd::net` |
 | enum 값 | `enum class` + `k`UpperCamelCase | `PacketType::kLoginReq` |
 
+- 예외: getter/setter처럼 저렴한 접근자는 snake_case (Goggle C++ Style Guide)
+
 ## 2. 포맷 — 전부 clang-format으로 자동화
 
 - 기준: `.clang-format` (`BasedOnStyle: Google`, 포인터 좌측 정렬 `T* p`)
