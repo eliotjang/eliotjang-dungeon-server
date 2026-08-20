@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <format>
@@ -11,12 +12,43 @@
 #include <string>
 #include <vector>
 
+#include "net/framing.h"
 #include "net/unique_fd.h"
+#include "proto/packet_header.h"
+
+std::vector<char> MakePacket(uint16_t msg_id, std::vector<char> payload) {
+  ejd::proto::PacketHeader h{};
+  h.length = ejd::proto::kHeaderSize + payload.size();
+  h.msg_id = msg_id;
+
+  std::vector<char> result{};
+  result.resize(h.length);
+  std::memcpy(result.data(), &h, ejd::proto::kHeaderSize);
+  std::memcpy(result.data() + ejd::proto::kHeaderSize, payload.data(),
+              payload.size());
+
+  return result;
+}
+
+bool ReadExact(int fd, char* buf, size_t len) {
+  size_t received = 0;
+  while (received < len) {
+    int r = read(fd, buf + received, len - received);
+    if (r <= 0) {
+      perror("read");
+      return false;
+    }
+
+    received += r;
+  }
+  return true;
+}
 
 int main(int argc, char* argv[]) {
   int count = (argc >= 2) ? std::stoi(argv[1]) : 10;
-  auto conns = std::vector<ejd::net::UniqueFd>();
 
+  auto conns = std::vector<ejd::net::UniqueFd>();
+  // 커넥션 연결
   while (count--) {
     int raw = socket(AF_INET, SOCK_STREAM, 0);
     if (raw == -1) {
@@ -51,13 +83,18 @@ int main(int argc, char* argv[]) {
   for (size_t i = 0; i < conns.size(); ++i) {
     const auto& conn = conns[i];
 
-    char send_buf[4096];
+    // char send_buf[4096];
     auto msg = std::format("Hello Client: {}, fd: {}", i, conn.get());
-    size_t n = msg.copy(send_buf, msg.size(), 0);
-    size_t sent = 0;
+    // size_t n = msg.copy(send_buf, msg.size(), 0);
 
+    auto payload = std::vector<char>(msg.begin(), msg.end());
+    auto packet = MakePacket(i, payload);
+
+    size_t n = packet.size();
+    size_t sent = 0;
+    // 전량 송신
     while (sent < n) {
-      ssize_t w = write(conn.get(), send_buf + sent, n - sent);
+      ssize_t w = write(conn.get(), packet.data() + sent, n - sent);
       if (w <= 0) {
         perror("write");
         break;
@@ -67,19 +104,27 @@ int main(int argc, char* argv[]) {
     }
 
     char recv_buf[4096];
-    size_t received = 0;
-
-    while (received < n) {
-      ssize_t r = read(conn.get(), recv_buf + received, n - received);
-      if (r <= 0) {
-        perror("read");
-        break;
-      }
-
-      received += r;
+    ejd::proto::PacketHeader h{};
+    // 전량 수신
+    if (!ReadExact(conn.get(), reinterpret_cast<char*>(&h),
+                   ejd::proto::kHeaderSize)) {
+      perror("read packet header");
+      continue;
     }
 
-    if (received == msg.size() && std::string_view(recv_buf, received) == msg) {
+    if (h.length < ejd::proto::kHeaderSize ||
+        h.length > ejd::proto::kMaxPacketLength) {
+      std::cerr << "신뢰할 수 없는 데이터\n";
+      continue;
+    }
+
+    auto payload_len = h.length - ejd::proto::kHeaderSize;
+    if (!ReadExact(conn.get(), recv_buf, payload_len)) {
+      std::cerr << "페이로드 오류\n";
+      continue;
+    }
+
+    if (payload_len == msg.size() && std::string_view(recv_buf, payload_len) == msg) {
       ok++;
     }
   }
