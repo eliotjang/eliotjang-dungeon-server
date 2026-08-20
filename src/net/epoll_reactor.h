@@ -13,7 +13,8 @@ namespace ejd::net {
 class EpollReactor {
  public:
   // 이동 비용이 낮은 타입은 값 전달이 표준형 (int 복사 1, 쓰기 1)
-  explicit EpollReactor(UniqueFd listen_fd) : listen_fd_(std::move(listen_fd)) {}
+  explicit EpollReactor(UniqueFd listen_fd)
+      : listen_fd_(std::move(listen_fd)) {}
   bool Init();
   void Run();
 

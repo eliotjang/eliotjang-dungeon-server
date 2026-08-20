@@ -15,6 +15,7 @@ struct PacketHeader {
 static_assert(sizeof(PacketHeader) == 8);
 
 inline constexpr uint32_t kHeaderSize = sizeof(PacketHeader);
-inline constexpr uint32_t kMaxPacketLength = 4096;  // 실제 최대 메시지(수백KB) 여유 및 악성 클라 방지
+// 실제 최대 메시지(수백KB) 여유 및 악성 클라 방지
+inline constexpr uint32_t kMaxPacketLength = 4096;
 
 }  // namespace ejd::proto

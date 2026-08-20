@@ -5,11 +5,11 @@
 
 #include <cerrno>
 #include <cstdio>
-#include <memory>
 #include <iostream>
+#include <memory>
 
-#include "net/unique_fd.h"
 #include "net/session.h"
+#include "net/unique_fd.h"
 
 namespace ejd::net {
 
@@ -41,7 +41,8 @@ void EpollReactor::Run() {
   while (true) {
     int n = epoll_wait(epoll_fd_.get(), events, kMaxEvents, -1);
     if (n == -1) {
-      if (errno == EINTR) continue;
+      if (errno == EINTR)
+        continue;
       else {
         perror("epoll_wait");
         return;
@@ -62,13 +63,14 @@ void EpollReactor::AcceptAll() {
   while (true) {
     int raw = accept4(listen_fd_.get(), nullptr, nullptr, SOCK_NONBLOCK);
     if (raw == -1) {
-      if (errno == EAGAIN) return;
-      else if (errno == EINTR) continue;
+      if (errno == EAGAIN)
+        return;
+      else if (errno == EINTR)
+        continue;
       else if (errno == EMFILE || errno == ENFILE) {
         perror("fd 한도 도달");
         return;
-      }
-      else {
+      } else {
         perror("accept4");
         return;
       }
@@ -81,7 +83,7 @@ void EpollReactor::AcceptAll() {
 
     if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_ADD, raw, &ev) == -1) {
       perror("epoll_ctl");
-      continue; // 세션 정리
+      continue;  // 세션 정리
     }
 
     sessions_[raw] = std::move(session);
@@ -91,8 +93,7 @@ void EpollReactor::AcceptAll() {
 
 void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
   auto it = sessions_.find(fd);
-  if (it == sessions_.end())
-    return;
+  if (it == sessions_.end()) return;
 
   if (events & (EPOLLERR | EPOLLHUP)) {
     CloseSession(fd);
@@ -100,8 +101,7 @@ void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
   }
 
   if (events & EPOLLIN) {
-    if (it->second->OnReadable() == Session::IoResult::kClose)
-      CloseSession(fd);
+    if (it->second->OnReadable() == Session::IoResult::kClose) CloseSession(fd);
   }
 }
 
