@@ -1,7 +1,8 @@
 # CONVENTIONS.md — eliotjang-dungeon-server 코드 컨벤션
 
-> 근거 문서: `cpp-code-conventions.md` (2026-08-13 결정: **후보 A — Google C++ Style Guide + C++ Core Guidelines 보완**)
-> 이 문서는 리포에서 실제로 지키는 규칙의 요약본이다. 규칙 변경 시 근거 문서와 이 파일에 함께 기록한다.
+> 근거 문서: `cpp-code-conventions.md` (2026-08-13 결정: **후보 A — Google C++ Style Guide + C++ Core Guidelines 보완**)  
+> 이 문서는 리포에서 실제로 지키는 규칙의 요약본.  
+> 규칙 변경 시 근거 문서와 이 파일에 함께 기록.
 
 ## 1. 네이밍
 
@@ -44,7 +45,7 @@
 
 ## 4. 헤더 규칙
 
-- **include 가드: `#pragma once`** (2026-08-13 확정 — Google 정통은 define 가드지만,
+- **include 가드: `#pragma once`** (2026-08-13 확정 — Google은 define 가드지만,
   주요 컴파일러 전부 지원 + 오타/복붙 실수 원천 차단을 이유로 절충 채택)
 - 모든 헤더는 self-contained (그 헤더 하나만 include해도 컴파일 가능)
 - include 순서: ① 대응 헤더 → ② C 시스템 → ③ C++ 표준 → ④ 외부 라이브러리 → ⑤ 프로젝트 헤더 (그룹 사이 빈 줄)
