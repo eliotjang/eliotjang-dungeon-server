@@ -82,7 +82,7 @@ void EpollReactor::AcceptAll() {
     ev.data.fd = raw;
 
     if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_ADD, raw, &ev) == -1) {
-      perror("epoll_ctl");
+      perror("epoll_ctl ADD EPOLLIN");
       continue;  // 세션 정리
     }
 
@@ -101,7 +101,40 @@ void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
   }
 
   if (events & EPOLLIN) {
-    if (it->second->OnReadable() == Session::IoResult::kClose) CloseSession(fd);
+    if (it->second->OnReadable() == Session::IoResult::kClose) {
+      CloseSession(fd);
+      return;
+    }
+    if (it->second->WantsWrite()) {
+      epoll_event ev{};
+      ev.events = EPOLLIN | EPOLLOUT;
+      ev.data.fd = fd;
+      if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_MOD, fd, &ev) == -1) {
+        perror("epoll_ctl MOD EPOLLOUT");
+        CloseSession(fd);
+        return;
+      }
+      std::cout << "EPOLLOUT 등록\n";
+    }
+  }
+
+  if (events & EPOLLOUT) {
+    if (it->second->OnWritable() == Session::IoResult::kClose) {
+      CloseSession(fd);
+      return;
+    }
+
+    if (!it->second->WantsWrite()) {
+      epoll_event ev{};
+      ev.events = EPOLLIN;
+      ev.data.fd = fd;
+      if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_MOD, fd, &ev) == -1) {
+        perror("epoll_ctl MOD EPOLLIN");
+        CloseSession(fd);
+        return;
+      }
+      std::cout << "EPOLLOUT 해제\n";
+    }
   }
 }
 
