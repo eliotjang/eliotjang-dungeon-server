@@ -6,6 +6,6 @@
 
 namespace ejd::net {
 
-UniqueFd CreateListenSocket(uint16_t port);
+UniqueFd CreateListenSocket(uint16_t port, int sndbuf_size);
 
 }  // namespace ejd::net

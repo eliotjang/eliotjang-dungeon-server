@@ -3,6 +3,7 @@
 #include <cerrno>
 #include <csignal>
 #include <iostream>
+#include <string>
 #include <utility>
 
 #include "common/version.h"
@@ -10,11 +11,13 @@
 #include "net/socket_util.h"
 #include "net/unique_fd.h"
 
-int main() {
-  std::cout << ejd::common::Version() << "\n";
+int main(int argc, char* argv[]) {
+  int sndbuf_size = (argc > 1) ? std::stoul(argv[1]) : 0;
+
+  std::cout << "Version: " << ejd::common::Version() << "\n";
 
   signal(SIGPIPE, SIG_IGN);
-  auto listen_fd = ejd::net::CreateListenSocket(5555);
+  auto listen_fd = ejd::net::CreateListenSocket(5555, sndbuf_size);
   if (!listen_fd.valid()) {
     std::cerr << "failed to create listen socket" << "\n";
     return 1;
