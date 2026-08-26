@@ -10,126 +10,208 @@
 #include <format>
 #include <iostream>
 #include <string>
+#include <string_view>
 #include <vector>
 
-#include "net/framing.h"
 #include "net/unique_fd.h"
 #include "proto/packet_header.h"
 
-std::vector<char> MakePacket(uint16_t msg_id, std::vector<char> payload) {
-  ejd::proto::PacketHeader h{};
-  h.length = ejd::proto::kHeaderSize + payload.size();
+namespace {
+
+using ejd::net::UniqueFd;
+using ejd::proto::kHeaderSize;
+using ejd::proto::kMaxPacketLength;
+using ejd::proto::PacketHeader;
+
+constexpr uint16_t kPort = 5555;
+
+// ----- 공용 헬퍼 -----
+
+UniqueFd ConnectTo(uint16_t port, int rcvbuf) {
+  int raw = socket(AF_INET, SOCK_STREAM, 0);
+  if (raw == -1) {
+    perror("socket");
+    return UniqueFd();
+  }
+
+  auto fd = UniqueFd(raw);
+
+  int opt = 1;
+  if (setsockopt(fd.get(), IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) == -1) {
+    perror("setsocket(TCP_NODELAY)");
+    return UniqueFd();
+  }
+
+  if (rcvbuf > 0 && setsockopt(fd.get(), SOL_SOCKET, SO_RCVBUF, &rcvbuf,
+                               sizeof(rcvbuf)) == -1) {
+    perror("setsockopt(SO_RCVBUF)");
+    return UniqueFd();
+  }
+
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  addr.sin_port = htons(port);
+
+  constexpr int kMaxAttempts = 20;
+  for (int attempt = 0; attempt < kMaxAttempts; ++attempt) {
+    if (connect(fd.get(), reinterpret_cast<const sockaddr*>(&addr),
+                sizeof(addr)) == 0) {
+      return fd;  // 연결 성공
+    }
+
+    if (errno != ECONNREFUSED) break;
+    usleep(100'000);  // 100ms
+  }
+
+  perror("connect");
+  return UniqueFd{};
+}
+
+std::vector<char> MakePacket(uint16_t msg_id, std::span<const char> payload) {
+  PacketHeader h{};
+  h.length = static_cast<uint32_t>(kHeaderSize + payload.size());
   h.msg_id = msg_id;
 
-  std::vector<char> result{};
-  result.resize(h.length);
-  std::memcpy(result.data(), &h, ejd::proto::kHeaderSize);
-  std::memcpy(result.data() + ejd::proto::kHeaderSize, payload.data(),
-              payload.size());
+  std::vector<char> result(h.length);
+  std::memcpy(result.data(), &h, kHeaderSize);
+  std::memcpy(result.data() + kHeaderSize, payload.data(), payload.size());
 
   return result;
+}
+
+bool SendAll(int fd, std::span<const char> data) {
+  size_t sent = 0;
+  while (sent < data.size()) {
+    ssize_t w = write(fd, data.data() + sent, data.size() - sent);
+    if (w <= 0) {
+      perror("write");
+      return false;
+    }
+
+    sent += static_cast<size_t>(w);
+  }
+
+  return true;
 }
 
 bool ReadExact(int fd, char* buf, size_t len) {
   size_t received = 0;
   while (received < len) {
-    int r = read(fd, buf + received, len - received);
+    ssize_t r = read(fd, buf + received, len - received);
     if (r <= 0) {
       perror("read");
       return false;
     }
 
-    received += r;
+    received += static_cast<size_t>(r);
   }
+
   return true;
 }
 
-int main(int argc, char* argv[]) {
-  int count = (argc >= 2) ? std::stoi(argv[1]) : 10;
+bool ReadEcho(int fd, uint16_t expected_msg_id,
+              std::span<const char> expected_payload) {
+  PacketHeader h{};
+  if (!ReadExact(fd, reinterpret_cast<char*>(&h), kHeaderSize)) return false;
 
-  auto conns = std::vector<ejd::net::UniqueFd>();
-  // 커넥션 연결
-  while (count--) {
-    int raw = socket(AF_INET, SOCK_STREAM, 0);
-    if (raw == -1) {
-      perror("socket");
-      continue;
-    }
+  if (h.length < kHeaderSize || h.length > kMaxPacketLength) {
+    std::cerr << std::format("invalid packet length: {}\n", h.length);
+    return false;
+  }
+  if (h.msg_id != expected_msg_id) {
+    std::cerr << std::format("msg_id mismatch: 기대 {}, 실제 {}\n",
+                             expected_msg_id, h.msg_id);
+    return false;
+  }
 
-    auto fd = ejd::net::UniqueFd(raw);
+  const size_t payload_len = h.length - kHeaderSize;
+  std::vector<char> buf(payload_len);
+  if (!ReadExact(fd, buf.data(), payload_len)) return false;
 
-    int opt = 1;
-    if (setsockopt(fd.get(), IPPROTO_TCP, TCP_NODELAY, &opt, sizeof(opt)) ==
-        -1) {
-      perror("setsockopt");
-      continue;
-    }
+  return payload_len == expected_payload.size() &&
+         std::memcmp(buf.data(), expected_payload.data(), payload_len) == 0;
+}
 
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    addr.sin_port = htons(5555);
+// ----- echo 모드 : 커넥션 count개, 각각 왕복 검증 -----
 
-    if (connect(fd.get(), reinterpret_cast<const sockaddr*>(&addr),
-                sizeof(addr)) == -1) {
-      perror("connect");
-      continue;
-    }
-
-    conns.push_back(std::move(fd));
+int Echo(int count) {
+  std::vector<UniqueFd> conns;
+  for (int i = 0; i < count; ++i) {
+    auto fd = ConnectTo(kPort, 0);
+    if (fd.valid()) conns.push_back(std::move(fd));
   }
 
   int ok = 0;
   for (size_t i = 0; i < conns.size(); ++i) {
     const auto& conn = conns[i];
-
-    // char send_buf[4096];
     auto msg = std::format("Hello Client: {}, fd: {}", i, conn.get());
-    // size_t n = msg.copy(send_buf, msg.size(), 0);
+    auto payload = std::span(msg.data(), msg.size());
+    auto packet = MakePacket(static_cast<uint16_t>(i), payload);
 
-    auto payload = std::vector<char>(msg.begin(), msg.end());
-    auto packet = MakePacket(i, payload);
-
-    size_t n = packet.size();
-    size_t sent = 0;
-    // 전량 송신
-    while (sent < n) {
-      ssize_t w = write(conn.get(), packet.data() + sent, n - sent);
-      if (w <= 0) {
-        perror("write");
-        break;
-      }
-
-      sent += w;
-    }
-
-    char recv_buf[4096];
-    ejd::proto::PacketHeader h{};
-    // 전량 수신
-    if (!ReadExact(conn.get(), reinterpret_cast<char*>(&h),
-                   ejd::proto::kHeaderSize)) {
-      perror("read packet header");
-      continue;
-    }
-
-    if (h.length < ejd::proto::kHeaderSize ||
-        h.length > ejd::proto::kMaxPacketLength) {
-      std::cerr << "신뢰할 수 없는 데이터\n";
-      continue;
-    }
-
-    auto payload_len = h.length - ejd::proto::kHeaderSize;
-    if (!ReadExact(conn.get(), recv_buf, payload_len)) {
-      std::cerr << "페이로드 오류\n";
-      continue;
-    }
-
-    if (payload_len == msg.size() && std::string_view(recv_buf, payload_len) == msg) {
-      ok++;
+    if (!SendAll(conn.get(), packet)) continue;
+    if (ReadEcho(conn.get(), static_cast<uint16_t>(i), payload)) {
+      ++ok;
     }
   }
 
-  std::cout << std::format("ok: {}, conns.size(): {}\n", ok, conns.size());
+  std::cout << std::format("echo ok: {}/{}\n", ok, conns.size());
+  return ok == static_cast<int>(conns.size()) ? 0 : 1;
+}
 
-  return 0;
+// ----- drain 모드: EPOLLOUT 등록 --> 드레인 --> 해제 사이클 -----
+
+int Drain() {
+  constexpr int packet_count = 4;
+
+  auto fd = ConnectTo(kPort, static_cast<int>(kMaxPacketLength));
+  if (!fd.valid()) return 1;
+
+  constexpr size_t kPayloadLen = kMaxPacketLength - kHeaderSize;
+
+  // 1) 읽지 않고 최대 크기 패킷 packet_count개 전량 송신
+  std::vector<std::vector<char>> payloads;
+  size_t total = 0;
+  for (int i = 0; i < packet_count; ++i) {
+    std::vector<char> payload(kPayloadLen);
+    for (size_t j = 0; j < kPayloadLen; ++j) {
+      payload[j] = static_cast<char>('A' + (i + j) % 26);
+    }
+    auto packet = MakePacket(static_cast<uint16_t>(i), payload);
+    if (!SendAll(fd.get(), packet)) return 1;
+
+    total += packet.size();
+    payloads.push_back(std::move(payload));
+  }
+
+  std::cout << std::format("drain: {} 바이트 전송\n", total);
+
+  // breakpoint) 서버 로그에 EPOLLOUT 등록 확인
+  // $> ss -tn 명령으로 송수신 커널 버퍼 확인 가능 (Send-Q, Recv-Q)
+
+  // 2) 드레인
+  int ok = 0;
+  for (int i = 0; i < packet_count; ++i) {
+    if (ReadEcho(fd.get(), static_cast<uint16_t>(i), payloads[i])) {
+      ++ok;
+    }
+  }
+
+  std::cout << std::format("drain ok: {}/{}\n", ok, packet_count);
+  return ok == packet_count ? 0 : 1;
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+  //  ./ejd_bot [mode] [count]
+  //  echo: count = 커넥션 수
+  std::string_view mode = (argc > 1) ? argv[1] : "echo";
+  int count = (argc >= 3) ? std::stoi(argv[2]) : 10;
+
+  if (mode == "echo") return Echo(count);
+  if (mode == "drain") return Drain();
+
+  std::cerr << "usage: ejd_bot <echo|drain> [count]\n";
+  return 1;
 }
