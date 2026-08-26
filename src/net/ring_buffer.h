@@ -14,8 +14,8 @@ class RingBuffer {
   size_t free_space() const { return capacity_ - size_; }
   size_t tail() const { return (head_ + size_) % capacity_; }
 
-  bool Write(const char* data, size_t len);
-  bool Peek(char* out, size_t len) const;
+  [[nodiscard]] bool Write(const char* data, size_t len);
+  void Peek(char* out, size_t len) const;
   void Consume(size_t len);
 
  private:

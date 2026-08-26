@@ -16,6 +16,6 @@ static_assert(sizeof(PacketHeader) == 8);
 
 inline constexpr uint32_t kHeaderSize = sizeof(PacketHeader);
 // 실제 최대 메시지(수백KB) 여유 및 악성 클라 방지
-inline constexpr uint32_t kMaxPacketLength = 4096;
+inline constexpr uint32_t kMaxPacketLength = 4 * 1024;
 
 }  // namespace ejd::proto

@@ -13,7 +13,7 @@ TEST(RingBufferTest, WriteThenPeekReturnsSameBytes) {
 
   ASSERT_TRUE(ring.Write(in, len));
   char out[5]{};
-  ASSERT_TRUE(ring.Peek(out, len));
+  ring.Peek(out, len);
 
   EXPECT_EQ(std::memcmp(in, out, len), 0);
   EXPECT_EQ(ring.size(), len);
@@ -44,7 +44,7 @@ TEST(RingBufferTest, WriteWrapAround) {
 
   ASSERT_TRUE(ring.Write(second_msg, second_len));
   char out[5]{};
-  ASSERT_TRUE(ring.Peek(out, second_len));
+  ring.Peek(out, second_len);
   EXPECT_EQ(std::memcmp(second_msg, out, second_len), 0);
 }
 
@@ -58,7 +58,7 @@ TEST(RingBufferTest, ConsumeRestoresFreeSpace) {
   EXPECT_EQ(ring.size(), 2u);
   EXPECT_EQ(ring.free_space(), 6u);
   char out[2]{};
-  ASSERT_TRUE(ring.Peek(out, 2));
+  ring.Peek(out, 2);
   EXPECT_EQ(out[0], 'e');
   EXPECT_EQ(out[1], 'f');
 }

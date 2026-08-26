@@ -19,14 +19,12 @@ bool RingBuffer::Write(const char* data, size_t len) {
   return true;
 }
 
-bool RingBuffer::Peek(char* out, size_t len) const {
-  if (size_ < len) return false;
+void RingBuffer::Peek(char* out, size_t len) const {
+  assert(len <= size_);
 
   size_t first = std::min(len, capacity_ - head_);
   std::memcpy(out, storage_.data() + head_, first);
   std::memcpy(out + first, storage_.data(), len - first);
-
-  return true;
 }
 
 void RingBuffer::Consume(size_t len) {

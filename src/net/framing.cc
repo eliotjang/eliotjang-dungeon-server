@@ -12,7 +12,7 @@ ExtractResult ExtractPacket(RingBuffer& ring, std::vector<char>& out) {
   if (ring.size() < proto::kHeaderSize) return ExtractResult::kNeedMore;
 
   proto::PacketHeader h{};
-  (void)ring.Peek(reinterpret_cast<char*>(&h), proto::kHeaderSize);
+  ring.Peek(reinterpret_cast<char*>(&h), proto::kHeaderSize);
 
   if (h.length < proto::kHeaderSize) return ExtractResult::kMalformed;
   if (h.length > proto::kMaxPacketLength) return ExtractResult::kMalformed;
@@ -20,7 +20,7 @@ ExtractResult ExtractPacket(RingBuffer& ring, std::vector<char>& out) {
   if (ring.size() < h.length) return ExtractResult::kNeedMore;
 
   out.resize(h.length);
-  (void)ring.Peek(out.data(), h.length);
+  ring.Peek(out.data(), h.length);
   ring.Consume(h.length);
 
   return ExtractResult::kPacket;
