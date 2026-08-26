@@ -21,7 +21,7 @@
       "name": "Launch Tests",
       "request": "launch",
       "type": "cppdbg",
-      "program": "${workspaceRoot}/build/debug/ejd_tests",
+      "program": "${workspaceFolder}/build/debug/ejd_tests",
       "args": [
         "--gtest_filter=${input:gtestFilter}",
         "--gtest_break_on_failure"
@@ -32,7 +32,23 @@
       "stopAtEntry": false,
       "setupCommands": [
         { "text": "-enable-pretty-printing", "ignoreFailures": true},
-        { "text": "set debuginfo enabled off" }
+        { "text": "set debuginfod enabled off" }
+      ]
+    },
+    {
+      "preLaunchTask": "build-debug",
+      "name": "Launch Bot",
+      "request": "launch",
+      "type": "cppdbg",
+      "program": "${workspaceFolder}/build/debug/ejd_bot",
+      "args": ["${input:botCount}"],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "setupCommands": [
+        { "text": "-enable-pretty-printing", "ignoreFailures": true },
+        { "text": "set debuginfod enabled off" }
       ]
     }
   ],
@@ -42,6 +58,12 @@
       "type": "promptString",
       "description": "gtest filter (ex: SmokeTest.* or * )",
       "default": "*"
+    },
+    {
+      "id": "botCount",
+      "type": "promptString",
+      "description": "봇 커넥션 수 (디버깅은 1 권장)",
+      "default": "1"
     }
   ]
 }
