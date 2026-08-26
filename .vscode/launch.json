@@ -7,10 +7,11 @@
       "request": "launch",
       "type": "cppdbg",
       "program": "${workspaceFolder}/build/debug/ejd_server",
+      "args": ["${input:sendBufferSize}"],
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
       "miDebuggerPath": "/usr/bin/gdb",
-      "stopAtEntry": true,
+      "stopAtEntry": false,
       "setupCommands": [
         { "text": "-enable-pretty-printing", "ignoreFailures": true },
         { "text": "set debuginfod enabled off" }
@@ -37,11 +38,27 @@
     },
     {
       "preLaunchTask": "build-debug",
-      "name": "Launch Bot",
+      "name": "ejd_bot (echo)",
       "request": "launch",
       "type": "cppdbg",
       "program": "${workspaceFolder}/build/debug/ejd_bot",
-      "args": ["${input:botCount}"],
+      "args": ["echo", "${input:botCount}"],
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "stopAtEntry": false,
+      "setupCommands": [
+        { "text": "-enable-pretty-printing", "ignoreFailures": true },
+        { "text": "set debuginfod enabled off" }
+      ]
+    },
+    {
+      "preLaunchTask": "build-debug",
+      "name": "ejd_bot (drain)",
+      "request": "launch",
+      "type": "cppdbg",
+      "program": "${workspaceFolder}/build/debug/ejd_bot",
+      "args": ["drain"],
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
       "miDebuggerPath": "/usr/bin/gdb",
@@ -62,8 +79,14 @@
     {
       "id": "botCount",
       "type": "promptString",
-      "description": "봇 커넥션 수 (디버깅은 1 권장)",
+      "description": "echo: 커넥션 수 / drain",
       "default": "1"
+    },
+    {
+      "id": "sendBufferSize",
+      "type": "promptString",
+      "description": "커널 송신버퍼 크기 (기본: 0 권장, drain test: 4096)",
+      "default": "0"
     }
   ]
 }
