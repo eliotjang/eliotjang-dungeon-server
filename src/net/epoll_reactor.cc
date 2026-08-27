@@ -5,6 +5,7 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <format>
 #include <iostream>
 #include <memory>
 
@@ -77,6 +78,7 @@ void EpollReactor::AcceptAll() {
     }
 
     auto session = std::make_unique<Session>(UniqueFd(raw));
+
     epoll_event ev{};
     ev.events = EPOLLIN;
     ev.data.fd = raw;
@@ -86,7 +88,11 @@ void EpollReactor::AcceptAll() {
       continue;  // 세션 정리
     }
 
-    sessions_[raw] = std::move(session);
+    sessions_[raw] = SessionEntry{
+        .session = std::move(session),
+        .registered_events = EPOLLIN,
+    };
+
     std::cout << "connected fd=" << raw << "\n";
   }
 }
@@ -100,41 +106,23 @@ void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
     return;
   }
 
-  if (events & EPOLLIN) {
-    if (it->second->OnReadable() == Session::IoResult::kClose) {
+  if (events & EPOLLOUT) {
+    if (it->second.session->OnWritable() == Session::IoResult::kClose) {
       CloseSession(fd);
       return;
-    }
-    if (it->second->WantsWrite()) {
-      epoll_event ev{};
-      ev.events = EPOLLIN | EPOLLOUT;
-      ev.data.fd = fd;
-      if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_MOD, fd, &ev) == -1) {
-        perror("epoll_ctl MOD EPOLLIN|EPOLLOUT");
-        CloseSession(fd);
-        return;
-      }
-      std::cout << "EPOLLOUT 등록\n";
     }
   }
 
-  if (events & EPOLLOUT) {
-    if (it->second->OnWritable() == Session::IoResult::kClose) {
+  if (events & EPOLLIN) {
+    if (it->second.session->OnReadable() == Session::IoResult::kClose) {
       CloseSession(fd);
       return;
     }
+  }
 
-    if (!it->second->WantsWrite()) {
-      epoll_event ev{};
-      ev.events = EPOLLIN;
-      ev.data.fd = fd;
-      if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_MOD, fd, &ev) == -1) {
-        perror("epoll_ctl MOD EPOLLIN");
-        CloseSession(fd);
-        return;
-      }
-      std::cout << "EPOLLOUT 해제\n";
-    }
+  if (!UpdateInterest(fd, it->second)) {
+    CloseSession(fd);
+    return;
   }
 }
 
@@ -144,6 +132,26 @@ void EpollReactor::CloseSession(int fd) {
 
   sessions_.erase(fd);
   std::cout << "closed fd=" << fd << "\n";
+}
+
+bool EpollReactor::UpdateInterest(int fd, SessionEntry& se) {
+  uint32_t want = EPOLLIN | (se.session->WantsWrite() ? EPOLLOUT : 0u);
+  if (se.registered_events == want) return true;
+
+  epoll_event ev{};
+  ev.events = want;
+  ev.data.fd = fd;
+  if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_MOD, fd, &ev) == -1) {
+    perror("epoll_ctl MOD");
+    return false;
+  }
+
+  se.registered_events = want;
+
+  std::cout << std::format(
+      "{} fd={}\n", (want & EPOLLOUT) ? "EPOLLOUT 등록" : "EPOLLOUT 해제", fd);
+
+  return true;
 }
 
 }  // namespace ejd::net
