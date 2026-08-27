@@ -68,7 +68,7 @@ void EpollReactor::AcceptAll() {
       else if (errno == EINTR)
         continue;
       else if (errno == EMFILE || errno == ENFILE) {
-        perror("fd 한도 도달");
+        perror("accept4 fd 한도 도달");
         return;
       } else {
         perror("accept4");
@@ -110,7 +110,7 @@ void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
       ev.events = EPOLLIN | EPOLLOUT;
       ev.data.fd = fd;
       if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_MOD, fd, &ev) == -1) {
-        perror("epoll_ctl MOD EPOLLOUT");
+        perror("epoll_ctl MOD EPOLLIN|EPOLLOUT");
         CloseSession(fd);
         return;
       }
@@ -140,7 +140,7 @@ void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
 
 void EpollReactor::CloseSession(int fd) {
   if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_DEL, fd, nullptr) == -1)
-    perror("close epoll_ctl");
+    perror("epoll_ctl DEL");
 
   sessions_.erase(fd);
   std::cout << "closed fd=" << fd << "\n";
