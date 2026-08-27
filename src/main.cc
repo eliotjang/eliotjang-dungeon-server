@@ -1,9 +1,11 @@
 #include <sys/socket.h>
 
 #include <cerrno>
+#include <charconv>
 #include <csignal>
+#include <format>
 #include <iostream>
-#include <string>
+#include <string_view>
 #include <utility>
 
 #include "common/version.h"
@@ -12,7 +14,17 @@
 #include "net/unique_fd.h"
 
 int main(int argc, char* argv[]) {
-  int sndbuf_size = (argc > 1) ? std::stoul(argv[1]) : 0;
+  int sndbuf_size = 0;
+  if (argc > 1) {
+    std::string_view sv(argv[1]);
+    auto [_, ec] =
+        std::from_chars(sv.data(), sv.data() + sv.size(), sndbuf_size);
+
+    if (ec != std::errc{}) {
+      std::cerr << std::format("커널 송신버퍼 크기 입력 에러: {}\n", sv);
+      return 1;
+    }
+  }
 
   std::cout << "Version: " << ejd::common::Version() << "\n";
 
