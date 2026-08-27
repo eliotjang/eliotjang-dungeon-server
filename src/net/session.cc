@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include <cerrno>
+#include <format>
 #include <iostream>
 
 #include "net/framing.h"
@@ -28,7 +29,8 @@ Session::IoResult Session::OnReadable() {
     }
 
     if (!recv_buffer_.Write(chunk, n)) {
-      std::cerr << "수신 버퍼 초과\n";
+      std::cerr << std::format("수신버퍼 초과: 시도={}, 남은 공간={}\n", n,
+                               (kRecvBufferCapacity - recv_buffer_.size()));
       return IoResult::kClose;
     }
   }
@@ -40,12 +42,11 @@ Session::IoResult Session::OnReadable() {
         return IoResult::kKeepAlive;
 
       case ExtractResult::kMalformed:
-        perror("ExtractPacket Malformed");
+        std::cerr << "ExtractPacket Malformed\n";
         return IoResult::kClose;
 
       case ExtractResult::kPacket:
         if (!Send(packet.data(), packet.size())) {
-          perror("Session::Send");
           return IoResult::kClose;
         }
         break;
@@ -55,7 +56,11 @@ Session::IoResult Session::OnReadable() {
 
 bool Session::Send(const char* data, size_t len) {
   // 1) 큐 적재
-  if (!send_buffer_.Write(data, len)) return false;
+  if (!send_buffer_.Write(data, len)) {
+    std::cerr << std::format("송신버퍼 초과: 시도={}, 남은 공간={}\n", len,
+                             (kSendBufferCapacity - send_buffer_.size()));
+    return false;
+  }
 
   // 2) flush
   char chunk[4096];
@@ -68,8 +73,10 @@ bool Session::Send(const char* data, size_t len) {
         continue;
       else if (errno == EAGAIN) {
         break;
-      } else
+      } else {
+        perror("write");
         return false;
+      }
     }
     // 3) 큐 소비
     send_buffer_.Consume(w);
