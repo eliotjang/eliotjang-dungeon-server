@@ -24,7 +24,7 @@ class Session {
   [[nodiscard]] bool WantsWrite() const { return send_buffer_.size(); }
 
  private:
-  // 비대칭(수신 1 : 송신 4): MMORPG는 다운링크 (브래드캐스트 편중)
+  // 비대칭(수신 1 : 송신 4): MMORPG는 다운링크 (브로드캐스트 편중)
   // 목표 동접 1만 세션 기준 3.2GB : 버퍼 예산 내 수용
   // 초과 시, 연결 종료
   static constexpr size_t kRecvBufferCapacity = 64 * 1024;

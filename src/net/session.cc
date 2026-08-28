@@ -24,13 +24,14 @@ Session::IoResult Session::OnReadable() {
         continue;
       else {
         perror("read");
+        std::cerr << std::format("fd={}\n", fd_.get());
         return IoResult::kClose;
       }
     }
 
     if (!recv_buffer_.Write(chunk, n)) {
-      std::cerr << std::format("수신버퍼 초과: 시도={}, 남은 공간={}\n", n,
-                               (kRecvBufferCapacity - recv_buffer_.size()));
+      std::cerr << std::format("수신버퍼 초과: 시도={}, 남은 공간={}, fd={}\n", n,
+                               (kRecvBufferCapacity - recv_buffer_.size()), fd_.get());
       return IoResult::kClose;
     }
   }
@@ -57,8 +58,8 @@ Session::IoResult Session::OnReadable() {
 bool Session::Send(const char* data, size_t len) {
   // 1) 큐 적재
   if (!send_buffer_.Write(data, len)) {
-    std::cerr << std::format("송신버퍼 초과: 시도={}, 남은 공간={}\n", len,
-                             (kSendBufferCapacity - send_buffer_.size()));
+    std::cerr << std::format("송신버퍼 초과: 시도={}, 남은 공간={}, fd={}\n", len,
+                             (kSendBufferCapacity - send_buffer_.size()), fd_.get());
     return false;
   }
 
@@ -75,6 +76,7 @@ bool Session::Send(const char* data, size_t len) {
         break;
       } else {
         perror("write");
+        std::cerr << std::format("fd={}\n", fd_.get());
         return false;
       }
     }
