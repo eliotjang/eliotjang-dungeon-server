@@ -10,7 +10,7 @@
 #include <iostream>
 
 namespace ejd::net {
-UniqueFd CreateListenSocket(uint16_t port, int sndbuf_size) {
+UniqueFd CreateListenSocket(uint16_t port, int sndbuf_size, int rcvbuf_size) {
   int raw = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
   if (raw == -1) {
     perror("socket");
@@ -25,18 +25,33 @@ UniqueFd CreateListenSocket(uint16_t port, int sndbuf_size) {
     return UniqueFd();
   }
 
-  // 커널 송신버퍼 수동 설정 (drain 테스트 : EPOLLOUT 등록 --> 드레인 --> 해제)
+  // 커널 송신버퍼 수동 설정
   if (sndbuf_size) {
     if (setsockopt(fd.get(), SOL_SOCKET, SO_SNDBUF, &sndbuf_size,
                    sizeof(sndbuf_size)) == -1) {
       perror("setsockopt(SO_SNDBUF)");
     } else {
-      int checked_sndbuf_size = 0;
-      socklen_t len = sizeof(checked_sndbuf_size);
-      getsockopt(fd.get(), SOL_SOCKET, SO_SNDBUF, &checked_sndbuf_size, &len);
+      int checked_sendbuf_size = 0;
+      socklen_t len = sizeof(checked_sendbuf_size);
+      getsockopt(fd.get(), SOL_SOCKET, SO_SNDBUF, &checked_sendbuf_size, &len);
       std::cout << std::format(
           "수동 송신 버퍼 : 요청 {} 바이트, 실제 {} 바이트\n", sndbuf_size,
-          checked_sndbuf_size);
+          checked_sendbuf_size);
+    }
+  }
+
+  // 커널 수신버퍼 수동 설정
+  if (rcvbuf_size) {
+    if (setsockopt(fd.get(), SOL_SOCKET, SO_RCVBUF, &rcvbuf_size,
+                   sizeof(rcvbuf_size)) == -1) {
+      perror("setsockopt(SO_RCVBUF)");
+    } else {
+      int checked_recvbuf_size = 0;
+      socklen_t len = sizeof(checked_recvbuf_size);
+      getsockopt(fd.get(), SOL_SOCKET, SO_RCVBUF, &checked_recvbuf_size, &len);
+      std::cout << std::format(
+          "수동 수신 버퍼 : 요청 {} 바이트, 실제 {} 바이트\n", rcvbuf_size,
+          checked_recvbuf_size);
     }
   }
 

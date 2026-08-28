@@ -15,6 +15,7 @@
 
 int main(int argc, char* argv[]) {
   int sndbuf_size = 0;
+  int rcvbuf_size = 0;
   if (argc > 1) {
     std::string_view sv(argv[1]);
     auto [_, ec] =
@@ -26,10 +27,21 @@ int main(int argc, char* argv[]) {
     }
   }
 
+  if (argc > 2) {
+    std::string_view sv(argv[2]);
+    auto [_, ec] =
+        std::from_chars(sv.data(), sv.data() + sv.size(), rcvbuf_size);
+
+    if (ec != std::errc{}) {
+      std::cerr << std::format("커널 수신버퍼 크기 입력 에러: {}\n", sv);
+      return 1;
+    }
+  }
+
   std::cout << "Version: " << ejd::common::Version() << "\n";
 
   signal(SIGPIPE, SIG_IGN);
-  auto listen_fd = ejd::net::CreateListenSocket(5555, sndbuf_size);
+  auto listen_fd = ejd::net::CreateListenSocket(5555, sndbuf_size, rcvbuf_size);
   if (!listen_fd.valid()) {
     std::cerr << "failed to create listen socket" << "\n";
     return 1;
