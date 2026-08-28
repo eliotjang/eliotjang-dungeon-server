@@ -24,6 +24,10 @@ using ejd::proto::kMaxPacketLength;
 using ejd::proto::PacketHeader;
 
 constexpr uint16_t kPort = 5555;
+constexpr size_t kPayloadLen = kMaxPacketLength - kHeaderSize;
+
+// ----- 공용 구조체/enum -----
+enum class SendResult { kOk, kPeerClosed, kError };
 
 // ----- 공용 헬퍼 -----
 
@@ -80,19 +84,28 @@ std::vector<char> MakePacket(uint16_t msg_id, std::span<const char> payload) {
   return result;
 }
 
-bool SendAll(int fd, std::span<const char> data) {
+SendResult SendAll(int fd, std::span<const char> data, int flags = 0) {
   size_t sent = 0;
   while (sent < data.size()) {
-    ssize_t w = write(fd, data.data() + sent, data.size() - sent);
-    if (w <= 0) {
-      perror("write");
-      return false;
+    ssize_t w = send(fd, data.data() + sent, data.size() - sent, flags);
+    // INFO: 봇 클라는 블로킹 소켓으로 EAGAIN 반환 없고, 그 자리에서 sleep
+    if (w == -1) {
+      if (errno == EINTR) continue;
+      else if (errno == EPIPE) {
+        return SendResult::kPeerClosed;
+      }
+      else if (errno == ECONNRESET) {
+        return SendResult::kPeerClosed;
+      } else {
+        perror("send");
+        return SendResult::kError;
+      }
     }
 
     sent += static_cast<size_t>(w);
   }
 
-  return true;
+  return SendResult::kOk;
 }
 
 bool ReadExact(int fd, char* buf, size_t len) {
@@ -149,7 +162,7 @@ int Echo(int count) {
     auto payload = std::span(msg.data(), msg.size());
     auto packet = MakePacket(static_cast<uint16_t>(i), payload);
 
-    if (!SendAll(conn.get(), packet)) continue;
+    if (SendAll(conn.get(), packet) != SendResult::kOk) continue;
     if (ReadEcho(conn.get(), static_cast<uint16_t>(i), payload)) {
       ++ok;
     }
@@ -178,7 +191,7 @@ int Drain() {
       payload[j] = static_cast<char>('A' + (i + j) % 26);
     }
     auto packet = MakePacket(static_cast<uint16_t>(i), payload);
-    if (!SendAll(fd.get(), packet)) return 1;
+    if (SendAll(fd.get(), packet) != SendResult::kOk) return 1;
 
     total += packet.size();
     payloads.push_back(std::move(payload));
