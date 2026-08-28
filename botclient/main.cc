@@ -2,8 +2,10 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
+#include <cerrno>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -31,7 +33,8 @@ enum class SendResult { kOk, kPeerClosed, kError };
 
 // ----- 공용 헬퍼 -----
 
-UniqueFd ConnectTo(uint16_t port, int rcvbuf) {
+UniqueFd ConnectTo(uint16_t port, int rcvbuf = 0, int rcv_timeout_ms = 0) {
+  // 봇 클라는 블로킹 소켓으로 전송 시, EAGAIN 반환 없음 (SOCK_NONBLOCK X)
   int raw = socket(AF_INET, SOCK_STREAM, 0);
   if (raw == -1) {
     perror("socket");
@@ -50,6 +53,17 @@ UniqueFd ConnectTo(uint16_t port, int rcvbuf) {
                                sizeof(rcvbuf)) == -1) {
     perror("setsockopt(SO_RCVBUF)");
     return UniqueFd();
+  }
+
+  if (rcv_timeout_ms > 0) {
+    timeval tv{};
+    tv.tv_sec = rcv_timeout_ms / 1000;
+    tv.tv_usec = (rcv_timeout_ms % 1000) * 1000;
+
+    if (setsockopt(fd.get(), SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
+      perror("setsockopt(SO_RCVTIMEO)");
+      return UniqueFd();
+    }
   }
 
   sockaddr_in addr{};
@@ -146,6 +160,22 @@ bool ReadEcho(int fd, uint16_t expected_msg_id,
          std::memcmp(buf.data(), expected_payload.data(), payload_len) == 0;
 }
 
+// SO_RCVTIMEO 설정 소켓 전용
+bool WaitPeerClose(int fd) {
+  char chunk[4096];
+  while (true) {
+    ssize_t r = read(fd, chunk, sizeof(chunk));
+    if (r == 0) return true;               // FIN 패킷 수신
+    if (r > 0) continue;
+    if (errno == EINTR) continue;
+    if (errno == ECONNRESET) return true;  // RST 패킷 수신
+    if (errno == EAGAIN) return false;     // 타임아웃
+
+    perror("read");
+    return false;
+  }
+}
+
 // ----- echo 모드 : 커넥션 count개, 각각 왕복 검증 -----
 
 int Echo(int count) {
@@ -180,8 +210,6 @@ int Drain() {
   auto fd = ConnectTo(kPort, static_cast<int>(kMaxPacketLength));
   if (!fd.valid()) return 1;
 
-  constexpr size_t kPayloadLen = kMaxPacketLength - kHeaderSize;
-
   // 1) 읽지 않고 최대 크기 패킷 packet_count개 전량 송신
   std::vector<std::vector<char>> payloads;
   size_t total = 0;
@@ -214,17 +242,61 @@ int Drain() {
   return ok == packet_count ? 0 : 1;
 }
 
+// ----- bomb 모드 : 커넥션 count개, 백프레셔 상한 검사 및 강제 종료 -----
+
+int Bomb(int count) {
+  std::vector<UniqueFd> conns;
+  for (int i = 0; i < count; ++i) {
+    auto fd = ConnectTo(kPort, static_cast<int>(kMaxPacketLength), 500);
+    if (fd.valid()) conns.push_back(std::move(fd));
+  }
+
+  int ok = 0;
+  for (size_t i = 0; i < conns.size(); ++i) {
+    const auto& conn = conns[i];
+    std::vector<char> payload(kPayloadLen);
+    for (size_t j = 0; j < kPayloadLen; ++j) {
+      payload[j] = static_cast<char>('A' + (i + j) % 26);
+    }
+    auto packet = MakePacket(static_cast<uint16_t>(i), payload);
+    constexpr size_t kMaxSendLength = 300'000;
+    size_t total = 0;
+    SendResult result = SendResult::kOk;
+    // 300KB 연속 송신
+    while (total <= kMaxSendLength) {
+      result = SendAll(conn.get(), packet, MSG_NOSIGNAL);
+      if (result != SendResult::kOk) break;
+
+      total += packet.size();
+    }
+
+    if (result == SendResult::kError) {
+      std::cerr << std::format("session {}: 송신 에러\n", i);
+      continue;
+    }
+
+    if (result == SendResult::kPeerClosed || WaitPeerClose(conn.get()))
+      ++ok;
+    else
+      std::cerr << std::format("session {}: 컷 감지 실패\n", i);
+  }
+
+  std::cout << std::format("bomb ok: {}/{}\n", ok, conns.size());
+  return ok == static_cast<int>(conns.size()) ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
   //  ./ejd_bot [mode] [count]
-  //  echo: count = 커넥션 수
+  //  count = 커넥션 수
   std::string_view mode = (argc > 1) ? argv[1] : "echo";
   int count = (argc >= 3) ? std::stoi(argv[2]) : 10;
 
   if (mode == "echo") return Echo(count);
   if (mode == "drain") return Drain();
+  if (mode == "bomb") return Bomb(count);
 
-  std::cerr << "usage: ejd_bot <echo|drain> [count]\n";
+  std::cerr << "usage: ejd_bot [mode] [count]\n";
   return 1;
 }
