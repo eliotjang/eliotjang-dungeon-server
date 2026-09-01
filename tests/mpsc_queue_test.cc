@@ -2,6 +2,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -180,9 +181,9 @@ TEST(MpscQueueTest, FourProducersNoLossNoDuplication) {
     queue.WaitDrainUntil(result, sc.get_token(), deadline);
     for (size_t i = 0; i < result.size(); ++i) {
       auto producer_idx = result[i].session_id;
-      ASSERT_TRUE(producer_idx < 4);
+      ASSERT_TRUE(producer_idx < producer_count);
       auto seq = DecodeSeq(result[i].packet);
-      ASSERT_EQ(seq, expected_next[producer_idx]);
+      ASSERT_EQ(seq, static_cast<size_t>(expected_next[producer_idx]));
       ++expected_next[producer_idx];
       ++total;
     }
