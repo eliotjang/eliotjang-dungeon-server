@@ -46,6 +46,7 @@ add_executable(ejd_tests
     tests/ring_buffer_test.cc
     tests/framing_test.cc
     tests/mpsc_queue_test.cc
+    tests/dispatcher_test.cc
 )
 # 예외 및 런타임 타입 정보 사용 가능
 target_compile_options(ejd_tests PRIVATE -Wall -Wextra -Werror)
