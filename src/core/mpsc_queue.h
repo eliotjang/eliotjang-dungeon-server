@@ -27,8 +27,9 @@ class MpscQueue {
                         std::chrono::steady_clock::time_point deadline) {
     std::unique_lock<std::mutex> lock(mutex_);
     
-    assert(out.empty());
     cv_.wait_until(lock, st, deadline, [this]() { return !items_.empty(); });
+    
+    out.clear();
     if (items_.empty()) return 0;
 
     std::swap(out, items_);
@@ -37,7 +38,7 @@ class MpscQueue {
   size_t TryDrain(std::vector<T>& out) {
     std::lock_guard<std::mutex> lock(mutex_);
 
-    assert(out.empty());
+    out.clear();
     if (items_.empty()) return 0;
 
     std::swap(out, items_);
