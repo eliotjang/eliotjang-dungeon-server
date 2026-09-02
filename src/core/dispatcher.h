@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cassert>
 #include <cstdint>
 #include <cstring>
 #include <format>
@@ -7,7 +8,6 @@
 #include <iostream>
 #include <unordered_map>
 #include <vector>
-#include <cassert>
 
 #include "core/session_packet.h"
 #include "proto/messages.h"
