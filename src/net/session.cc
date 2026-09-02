@@ -12,11 +12,16 @@
 
 namespace ejd::net {
 
-Session::IoResult Session::OnReadable() {
+Session::IoResult Session::OnReadable(
+    std::vector<std::vector<char>>& out_packets) {
+  bool is_fin{false};
   while (true) {
     char chunk[4096];
     ssize_t n = read(fd_.get(), chunk, sizeof(chunk));
-    if (n == 0) return IoResult::kClose;
+    if (n == 0) {
+      is_fin = true;
+      break;
+    }
     if (n < 0) {
       if (errno == EAGAIN)
         break;
@@ -30,8 +35,9 @@ Session::IoResult Session::OnReadable() {
     }
 
     if (!recv_buffer_.Write(chunk, n)) {
-      std::cerr << std::format("수신버퍼 초과: 시도={}, 남은 공간={}, fd={}\n", n,
-                               (kRecvBufferCapacity - recv_buffer_.size()), fd_.get());
+      std::cerr << std::format("수신버퍼 초과: 시도={}, 남은 공간={}, fd={}\n",
+                               n, (kRecvBufferCapacity - recv_buffer_.size()),
+                               fd_.get());
       return IoResult::kClose;
     }
   }
@@ -40,6 +46,7 @@ Session::IoResult Session::OnReadable() {
   while (true) {
     switch (ExtractPacket(recv_buffer_, packet)) {
       case ExtractResult::kNeedMore:
+        if (is_fin) return IoResult::kClose;
         return IoResult::kKeepAlive;
 
       case ExtractResult::kMalformed:
@@ -47,9 +54,7 @@ Session::IoResult Session::OnReadable() {
         return IoResult::kClose;
 
       case ExtractResult::kPacket:
-        if (!Send(packet.data(), packet.size())) {
-          return IoResult::kClose;
-        }
+        out_packets.push_back(std::move(packet));
         break;
     }
   }
@@ -58,8 +63,9 @@ Session::IoResult Session::OnReadable() {
 bool Session::Send(const char* data, size_t len) {
   // 1) 큐 적재
   if (!send_buffer_.Write(data, len)) {
-    std::cerr << std::format("송신버퍼 초과: 시도={}, 남은 공간={}, fd={}\n", len,
-                             (kSendBufferCapacity - send_buffer_.size()), fd_.get());
+    std::cerr << std::format("송신버퍼 초과: 시도={}, 남은 공간={}, fd={}\n",
+                             len, (kSendBufferCapacity - send_buffer_.size()),
+                             fd_.get());
     return false;
   }
 

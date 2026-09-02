@@ -6,9 +6,13 @@
 #include <format>
 #include <iostream>
 #include <string_view>
+#include <thread>
 #include <utility>
 
 #include "common/version.h"
+#include "core/dispatcher.h"
+#include "core/session_packet.h"
+#include "core/shard_worker.h"
 #include "net/epoll_reactor.h"
 #include "net/socket_util.h"
 #include "net/unique_fd.h"
@@ -47,7 +51,23 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
-  auto reactor = ejd::net::EpollReactor(std::move(listen_fd));
+  auto dispatcher = ejd::core::Dispatcher();
+  dispatcher.Register(
+      ejd::proto::MsgId::kEcho,
+      [](const ejd::core::SessionPacket& in,
+         std::vector<ejd::core::SessionPacket>& out) { out.push_back(in); });
+
+  auto shard_worker = ejd::core::ShardWorker(
+      dispatcher, [](std::vector<ejd::core::SessionPacket> out) {
+        std::cout << "thread_id=" << std::this_thread::get_id() << "\n";
+        for (auto& session_packet : out) {
+          std::cout << std::format(
+              "에코 검증: session_id={}, packet.size()={}\n",
+              session_packet.session_id, session_packet.packet.size());
+        }
+      });
+
+  auto reactor = ejd::net::EpollReactor(std::move(listen_fd), shard_worker);
 
   if (!reactor.Init()) {
     std::cerr << "failed to init epoll socket" << "\n";

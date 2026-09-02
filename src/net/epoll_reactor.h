@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <utility>
 
+#include "core/shard_worker.h"
 #include "net/session.h"
 #include "net/unique_fd.h"
 
@@ -14,13 +15,14 @@ namespace ejd::net {
 
 class EpollReactor {
  public:
-  explicit EpollReactor(UniqueFd listen_fd)
-      : listen_fd_(std::move(listen_fd)) {}
+  explicit EpollReactor(UniqueFd listen_fd, core::ShardWorker& shard_worker)
+      : listen_fd_(std::move(listen_fd)), shard_worker_(shard_worker) {}
   bool Init();
   void Run();
 
  private:
   struct SessionEntry {
+    uint64_t session_id;
     std::unique_ptr<Session> session;
     uint32_t registered_events;
   };
@@ -33,6 +35,8 @@ class EpollReactor {
   UniqueFd epoll_fd_;
   UniqueFd listen_fd_;
   std::unordered_map<int, SessionEntry> sessions_;
+  core::ShardWorker& shard_worker_;
+  uint64_t next_session_id_{};
 };
 
 }  // namespace ejd::net

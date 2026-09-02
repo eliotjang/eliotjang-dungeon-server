@@ -1,6 +1,7 @@
 #pragma once
 
 #include <utility>
+#include <vector>
 
 #include "net/ring_buffer.h"
 #include "net/unique_fd.h"
@@ -18,7 +19,7 @@ class Session {
   int fd() const { return fd_.get(); }
   enum class IoResult { kKeepAlive, kClose };
 
-  IoResult OnReadable();
+  IoResult OnReadable(std::vector<std::vector<char>>& out_packets);
   [[nodiscard]] bool Send(const char* data, size_t len);
   IoResult OnWritable();
   [[nodiscard]] bool WantsWrite() const { return send_buffer_.size(); }

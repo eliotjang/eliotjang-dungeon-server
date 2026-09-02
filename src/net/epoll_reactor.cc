@@ -9,6 +9,7 @@
 #include <iostream>
 #include <memory>
 
+#include "core/session_packet.h"
 #include "net/session.h"
 #include "net/unique_fd.h"
 
@@ -89,6 +90,7 @@ void EpollReactor::AcceptAll() {
     }
 
     sessions_[raw] = SessionEntry{
+        .session_id = next_session_id_++,
         .session = std::move(session),
         .registered_events = EPOLLIN,
     };
@@ -114,7 +116,16 @@ void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
   }
 
   if (events & EPOLLIN) {
-    if (it->second.session->OnReadable() == Session::IoResult::kClose) {
+    std::vector<std::vector<char>> out{};
+    auto result = it->second.session->OnReadable(out);
+
+    for (size_t i = 0; i < out.size(); ++i) {
+      auto session_packet =
+          core::SessionPacket{it->second.session_id, std::move(out[i])};
+      shard_worker_.Push(std::move(session_packet));
+    }
+
+    if (result == Session::IoResult::kClose) {
       CloseSession(fd);
       return;
     }
