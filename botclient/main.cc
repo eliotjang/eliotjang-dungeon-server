@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "net/unique_fd.h"
+#include "proto/messages.h"
 #include "proto/packet_header.h"
 
 namespace {
@@ -190,10 +191,10 @@ int Echo(int count) {
     const auto& conn = conns[i];
     auto msg = std::format("Hello Client: {}, fd: {}", i, conn.get());
     auto payload = std::span(msg.data(), msg.size());
-    auto packet = MakePacket(static_cast<uint16_t>(i), payload);
+    auto packet = MakePacket(static_cast<uint16_t>(ejd::proto::MsgId::kEcho), payload);
 
     if (SendAll(conn.get(), packet) != SendResult::kOk) continue;
-    if (ReadEcho(conn.get(), static_cast<uint16_t>(i), payload)) {
+    if (ReadEcho(conn.get(), static_cast<uint16_t>(ejd::proto::MsgId::kEcho), payload)) {
       ++ok;
     }
   }
@@ -218,7 +219,7 @@ int Drain() {
     for (size_t j = 0; j < kPayloadLen; ++j) {
       payload[j] = static_cast<char>('A' + (i + j) % 26);
     }
-    auto packet = MakePacket(static_cast<uint16_t>(i), payload);
+    auto packet = MakePacket(static_cast<uint16_t>(ejd::proto::MsgId::kEcho), payload);
     if (SendAll(fd.get(), packet) != SendResult::kOk) return 1;
 
     total += packet.size();
@@ -233,7 +234,7 @@ int Drain() {
   // 2) 드레인
   int ok = 0;
   for (int i = 0; i < packet_count; ++i) {
-    if (ReadEcho(fd.get(), static_cast<uint16_t>(i), payloads[i])) {
+    if (ReadEcho(fd.get(), static_cast<uint16_t>(ejd::proto::MsgId::kEcho), payloads[i])) {
       ++ok;
     }
   }
@@ -258,7 +259,7 @@ int Bomb(int count) {
     for (size_t j = 0; j < kPayloadLen; ++j) {
       payload[j] = static_cast<char>('A' + (i + j) % 26);
     }
-    auto packet = MakePacket(static_cast<uint16_t>(i), payload);
+    auto packet = MakePacket(static_cast<uint16_t>(ejd::proto::MsgId::kEcho), payload);
     constexpr size_t kMaxSendLength = 300'000;
     size_t total = 0;
     SendResult result = SendResult::kOk;
