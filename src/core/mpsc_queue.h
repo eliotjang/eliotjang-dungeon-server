@@ -26,9 +26,9 @@ class MpscQueue {
   size_t WaitDrainUntil(std::vector<T>& out, std::stop_token st,
                         std::chrono::steady_clock::time_point deadline) {
     std::unique_lock<std::mutex> lock(mutex_);
-    
+
     cv_.wait_until(lock, st, deadline, [this]() { return !items_.empty(); });
-    
+
     out.clear();
     if (items_.empty()) return 0;
 
