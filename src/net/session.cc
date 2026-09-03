@@ -79,7 +79,7 @@ bool Session::Send(const char* data, size_t len) {
       if (errno == EINTR)
         continue;
       else if (errno == EAGAIN) {
-        break;
+        break;  // 잔량은 EPOLLOUT 처리
       } else {
         perror("write");
         std::cerr << std::format("fd={}\n", fd_.get());
