@@ -182,7 +182,7 @@ bool WaitPeerClose(int fd) {
 int Echo(int count) {
   std::vector<UniqueFd> conns;
   for (int i = 0; i < count; ++i) {
-    auto fd = ConnectTo(kPort, 0);
+    auto fd = ConnectTo(kPort, 0, 500);
     if (fd.valid()) conns.push_back(std::move(fd));
   }
 
@@ -208,7 +208,7 @@ int Echo(int count) {
 int Drain() {
   constexpr int packet_count = 4;
 
-  auto fd = ConnectTo(kPort, static_cast<int>(kMaxPacketLength));
+  auto fd = ConnectTo(kPort, static_cast<int>(kMaxPacketLength), 1000);
   if (!fd.valid()) return 1;
 
   // 1) 읽지 않고 최대 크기 패킷 packet_count개 전량 송신
