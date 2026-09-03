@@ -30,7 +30,15 @@ bool EpollReactor::Init() {
   ev.events = EPOLLIN;
   ev.data.fd = listen_fd_.get();
   if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_ADD, listen_fd_.get(), &ev) == -1) {
-    perror("epoll_ctl");
+    perror("epoll_ctl ADD EPOLLIN listen_fd_");
+    return false;
+  }
+
+  ev = epoll_event{};
+  ev.events = EPOLLIN;
+  ev.data.fd = event_fd_;
+  if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_ADD, event_fd_, &ev) == -1) {
+    perror("epoll_ctl ADD EPOLLIN event_fd_");
     return false;
   }
 
@@ -55,6 +63,8 @@ void EpollReactor::Run() {
       int fd = events[i].data.fd;
       if (fd == listen_fd_.get())
         AcceptAll();
+      else if (fd == event_fd_)
+        HandleWakeup(events[i].events);
       else
         HandleSessionEvent(fd, events[i].events);
     }
@@ -89,13 +99,57 @@ void EpollReactor::AcceptAll() {
       continue;  // 세션 정리
     }
 
-    sessions_[raw] = SessionEntry{
-        .session_id = next_session_id_++,
-        .session = std::move(session),
-        .registered_events = EPOLLIN,
-    };
+    auto session_id = next_session_id_++;
+
+    auto [session_entry_it, sessions_inserted] =
+        sessions_.try_emplace(raw, session_id, std::move(session), EPOLLIN);
+    assert(sessions_inserted && "fd already tracked");
+
+    auto [fd_it, fd_inserted] = id_to_fd_.try_emplace(session_id, raw);
+    assert(fd_inserted && "duplicate session_id");
 
     std::cout << "connected fd=" << raw << "\n";
+  }
+}
+
+void EpollReactor::HandleWakeup(uint32_t events) {
+  if (events & (EPOLLIN)) {
+    uint64_t cnt{};
+    // read 이후 드레인으로 유실 방지
+    ssize_t n = read(event_fd_, &cnt, sizeof(cnt));
+    if (n == -1) {
+      if (errno != EAGAIN) {  // EAGAIN은 cnt가 0인 정상 분기
+        perror("read");
+        return;
+      }
+    }
+
+    std::vector<core::SessionPacket> drained{};
+    outbound_.TryDrain(drained);
+
+    for (const auto& session_packet : drained) {
+      auto fd_it = id_to_fd_.find(session_packet.session_id);
+      // 강제종료된 클라의 남은 패킷 폐기
+      if (fd_it == id_to_fd_.end()) continue;
+
+      auto session_entry_it = sessions_.find(fd_it->second);
+      if (session_entry_it == sessions_.end()) {
+        std::cerr << "not find SessionEntry. fd=" << fd_it->second << "\n";
+        continue;
+      }
+
+      if (!session_entry_it->second.session->Send(
+              session_packet.packet.data(), session_packet.packet.size())) {
+        CloseSession(session_entry_it->second.session_id, fd_it->second);
+        continue;
+      }
+
+      // 송신버퍼 잔량 EPOLLOUT 처리
+      if (!UpdateInterest(fd_it->second, session_entry_it->second)) {
+        CloseSession(session_entry_it->second.session_id, fd_it->second);
+        continue;
+      }
+    }
   }
 }
 
@@ -104,13 +158,13 @@ void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
   if (it == sessions_.end()) return;
 
   if (events & (EPOLLERR | EPOLLHUP)) {
-    CloseSession(fd);
+    CloseSession(it->second.session_id, fd);
     return;
   }
 
   if (events & EPOLLOUT) {
     if (it->second.session->OnWritable() == Session::IoResult::kClose) {
-      CloseSession(fd);
+      CloseSession(it->second.session_id, fd);
       return;
     }
   }
@@ -126,21 +180,22 @@ void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {
     }
 
     if (result == Session::IoResult::kClose) {
-      CloseSession(fd);
+      CloseSession(it->second.session_id, fd);
       return;
     }
   }
 
   if (!UpdateInterest(fd, it->second)) {
-    CloseSession(fd);
+    CloseSession(it->second.session_id, fd);
     return;
   }
 }
 
-void EpollReactor::CloseSession(int fd) {
+void EpollReactor::CloseSession(uint64_t session_id, int fd) {
   if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_DEL, fd, nullptr) == -1)
     perror("epoll_ctl DEL");
 
+  id_to_fd_.erase(session_id);
   sessions_.erase(fd);
   std::cout << "closed fd=" << fd << "\n";
 }

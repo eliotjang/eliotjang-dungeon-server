@@ -1,4 +1,6 @@
+#include <sys/eventfd.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
 #include <cerrno>
 #include <charconv>
@@ -11,6 +13,7 @@
 
 #include "common/version.h"
 #include "core/dispatcher.h"
+#include "core/mpsc_queue.h"
 #include "core/session_packet.h"
 #include "core/shard_worker.h"
 #include "net/epoll_reactor.h"
@@ -57,17 +60,27 @@ int main(int argc, char* argv[]) {
       [](const ejd::core::SessionPacket& in,
          std::vector<ejd::core::SessionPacket>& out) { out.push_back(in); });
 
+  auto outbound = ejd::core::MpscQueue<ejd::core::SessionPacket>();
+  auto event_fd = ejd::net::UniqueFd(eventfd(0, EFD_NONBLOCK));
+  if (!event_fd.valid()) {
+    perror("eventfd");
+    return 1;
+  }
+
   auto shard_worker = ejd::core::ShardWorker(
-      dispatcher, [](std::vector<ejd::core::SessionPacket> out) {
-        std::cout << "thread_id=" << std::this_thread::get_id() << "\n";
-        for (auto& session_packet : out) {
-          std::cout << std::format(
-              "에코 검증: session_id={}, packet.size()={}\n",
-              session_packet.session_id, session_packet.packet.size());
+      dispatcher, [&outbound, efd = event_fd.get()](
+                      std::vector<ejd::core::SessionPacket> out) {
+        for (auto& session_packet : out)
+          outbound.Push(std::move(session_packet));
+        uint64_t one = 1;
+        ssize_t n = write(efd, &one, sizeof(one));
+        if (n == -1) {
+          perror("write");
         }
       });
 
-  auto reactor = ejd::net::EpollReactor(std::move(listen_fd), shard_worker);
+  auto reactor = ejd::net::EpollReactor(std::move(listen_fd), event_fd.get(),
+                                        outbound, shard_worker);
 
   if (!reactor.Init()) {
     std::cerr << "failed to init epoll socket" << "\n";
