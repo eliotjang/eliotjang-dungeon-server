@@ -68,6 +68,21 @@ bomb의 컷 판정은 송신 실패가 아니라 끊김 관측으로 한다.
          즉시 에코에서는 read -> Send가 한 자리에서 돌았지만 워커 경유 전환으로 변경되며 이슈 확인됨.
 - 해법 방향 : 위 해법 방향과 마찬가지로 링버퍼 여유 기반 read 중단하면 링버퍼가 차는 일이 없어져 bomb는 송신 컷으로 결정적 재현 가능함.
 
+TCP half-close(SHUT_WR 후 응답 대기)는 마지막 응답을 읽는다.
+
+- 증거 : 요청 송신 + shutdown(WR) 후 recv은 0 바이트
+- 원인 : read()==0(FIN)을 전제 종료로 해석하여 즉시 세션을 닫음. 완성 패킷은 워커까지 전달되지만 비동기 응답이 돌아올 때 세션이 이미 닫혀 id 조회 실패하여 폐기됨.
+- 판정 : bot 시나리오는 응답을 먼저 읽고 닫으니 미발현. 해법은 세션 Draining 상태(인플라이트 응답 전달까지 close 유예).
+
+## 종료 (graceful shutdown)
+
+SIGINT/SIGTERM을 signalfd로 받아 시그널을 이벤트 루프에 통합한다.
+
+- 마스크는 워커 스레드 생성 전에 걸어놔서 시그널이 워커 스레드로 들어오는 경우도 처리 보장함
+- 종료 순서는 선언 역순 파괴 : reactor(세션 fd close) → shard_worker(jthread 소멸자가 request_stop 후 join) → MPSC큐, eventfd
+- 검증 로그 순서 : 'signal N 수신` → `shutdown: main return` → `shard worker loop exit`
+- VS CODE F5(gdb) 안의 Ctrl+C는 종료 로그 미출력. 디버거가 신호를 전달하는 것이 아니라 ptrace로 프로세스를 정지시킴.
+
 ## 관측 도구
 
 - `ss -tn` : 커널 버퍼 적체 확인 (서버 행 Send-Q / 봇 행 Recv-Q). 주의 : Send-Q가 고정돼 있어도 유저스페이스 송신 링버퍼가 커널을 재충전하는 중일 수 있음
