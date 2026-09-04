@@ -1,6 +1,7 @@
 #include "net/epoll_reactor.h"
 
 #include <sys/epoll.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 
 #include <cerrno>
@@ -42,13 +43,23 @@ bool EpollReactor::Init() {
     return false;
   }
 
+  ev = epoll_event{};
+  ev.events = EPOLLIN;
+  ev.data.fd = signal_fd_;
+  if (epoll_ctl(epoll_fd_.get(), EPOLL_CTL_ADD, signal_fd_, &ev) == -1) {
+    perror("epoll_ctl ADD EPOLLIN signal_fd_");
+    return false;
+  }
+
+  running_ = true;
+
   return true;
 }
 
 void EpollReactor::Run() {
   epoll_event events[kMaxEvents];
 
-  while (true) {
+  while (running_) {
     int n = epoll_wait(epoll_fd_.get(), events, kMaxEvents, -1);
     if (n == -1) {
       if (errno == EINTR)
@@ -65,6 +76,8 @@ void EpollReactor::Run() {
         AcceptAll();
       else if (fd == event_fd_)
         HandleWakeup(events[i].events);
+      else if (fd == signal_fd_)
+        HandleSignal();
       else
         HandleSessionEvent(fd, events[i].events);
     }
@@ -151,6 +164,19 @@ void EpollReactor::HandleWakeup(uint32_t events) {
       }
     }
   }
+}
+
+void EpollReactor::HandleSignal() {
+  signalfd_siginfo info{};
+  ssize_t n = read(signal_fd_, &info, sizeof(info));
+  if (n <= 0) {
+    perror("read");
+    return;
+  }
+
+  std::cout << std::format("signal {} 수신, 종료 시작\n", info.ssi_signo);
+
+  running_ = false;
 }
 
 void EpollReactor::HandleSessionEvent(int fd, uint32_t events) {

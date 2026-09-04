@@ -1,6 +1,7 @@
 #include "core/shard_worker.h"
 
 #include <chrono>
+#include <iostream>
 #include <stop_token>
 #include <thread>
 #include <vector>
@@ -13,7 +14,10 @@ namespace ejd::core {
 
 ShardWorker::ShardWorker(Dispatcher& dispatcher, ResponseSink deliver)
     : dispatcher_(dispatcher), deliver_(std::move(deliver)) {
-  thread_ = std::jthread([this](std::stop_token st) { this->Loop(st); });
+  thread_ = std::jthread([this](std::stop_token st) {
+    this->Loop(st);
+    std::cout << "shard worker loop exit\n";
+  });
 }
 
 void ShardWorker::Loop(std::stop_token st) {

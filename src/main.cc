@@ -1,4 +1,6 @@
+#include <signal.h>
 #include <sys/eventfd.h>
+#include <sys/signalfd.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -8,7 +10,6 @@
 #include <format>
 #include <iostream>
 #include <string_view>
-#include <thread>
 #include <utility>
 
 #include "common/version.h"
@@ -54,6 +55,19 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  sigset_t mask{};
+  sigemptyset(&mask);
+  sigaddset(&mask, SIGINT);
+  sigaddset(&mask, SIGTERM);
+  pthread_sigmask(SIG_BLOCK, &mask, NULL);
+
+  auto signal_fd =
+      ejd::net::UniqueFd(signalfd(-1, &mask, SFD_NONBLOCK | SFD_CLOEXEC));
+  if (!signal_fd.valid()) {
+    perror("signalfd");
+    return 1;
+  }
+
   auto dispatcher = ejd::core::Dispatcher();
   dispatcher.Register(
       ejd::proto::MsgId::kEcho,
@@ -79,17 +93,19 @@ int main(int argc, char* argv[]) {
         }
       });
 
-  auto reactor = ejd::net::EpollReactor(std::move(listen_fd), event_fd.get(),
-                                        outbound, shard_worker);
+  auto reactor =
+      ejd::net::EpollReactor(std::move(listen_fd), event_fd.get(),
+                             signal_fd.get(), outbound, shard_worker);
 
   if (!reactor.Init()) {
-    std::cerr << "failed to init epoll socket" << "\n";
+    std::cerr << "failed to init epoll socket\n";
     return 1;
   }
 
-  std::cout << "listening on port 5555" << "\n";
+  std::cout << "listening on port 5555\n";
 
   reactor.Run();
 
+  std::cout << "shutdown: main return\n";
   return 0;
 }
