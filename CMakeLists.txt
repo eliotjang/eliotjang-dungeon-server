@@ -26,6 +26,12 @@ target_compile_options(ejd_lib PRIVATE ${EJD_STRICT_OPTIONS})
 # 프로젝트 버전 주입
 target_compile_definitions(ejd_lib PRIVATE EJD_VERSION="${PROJECT_VERSION}")
 
+# 외부 라이브러리 링크
+find_package(PkgConfig REQUIRED)
+# MySQL 클라이언트 라이브러리 링크
+pkg_check_modules(MYSQL REQUIRED IMPORTED_TARGET mysqlclient)
+target_link_libraries(ejd_lib PRIVATE PkgConfig::MYSQL)
+
 #---- ejd_server : 실행 파일 ----
 add_executable(ejd_server src/main.cc)
 target_link_libraries(ejd_server PRIVATE ejd_lib)
