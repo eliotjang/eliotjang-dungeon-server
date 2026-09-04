@@ -19,6 +19,8 @@ add_library(ejd_lib STATIC
     src/net/ring_buffer.cc
     src/net/framing.cc
     src/core/shard_worker.cc
+    src/db/connection.cc
+    src/db/transaction.cc
 )
 # ejd_server, ejd_tests도 src include 경로 사용
 target_include_directories(ejd_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
@@ -54,6 +56,8 @@ add_executable(ejd_tests
     tests/framing_test.cc
     tests/mpsc_queue_test.cc
     tests/dispatcher_test.cc
+    tests/connection_test.cc
+    tests/transaction_test.cc
 )
 # 예외 및 런타임 타입 정보 사용 가능
 target_compile_options(ejd_tests PRIVATE -Wall -Wextra -Werror)
